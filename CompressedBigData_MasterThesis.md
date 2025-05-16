@@ -312,6 +312,12 @@ Huffman coding achieves compression by assigning variable-length codes to input 
 
 For a given set of symbol frequencies, Huffman coding produces an optimal prefix code, meaning no code is a prefix of another code. This property enables unambiguous decoding.
 
+Figure 4.1 illustrates the process of Huffman coding with a simple example:
+
+![Huffman Coding Example](thesis_figures/huffman_coding_example.md)
+
+**Figure 4.1**: Step-by-step illustration of the Huffman coding process, from frequency analysis to code assignment and text encoding.
+
 **Compression Efficiency**
 
 The expected code length L(C) for a Huffman code C is bounded by:
@@ -367,6 +373,12 @@ For a sequence S = [s₁, s₂, ..., sₙ], delta encoding produces:
 ΔS = [s₁, s₂-s₁, s₃-s₂, ..., sₙ-sₙ₋₁]
 
 The compression effectiveness depends on the statistical properties of these differences, particularly their entropy and range.
+
+Figure 4.2 shows a practical example of delta encoding:
+
+![Delta Encoding Example](thesis_figures/delta_encoding_example.md)
+
+**Figure 4.2**: Illustration of delta encoding process applied to a time series, showing how original values are transformed into a reference value and a sequence of deltas.
 
 **Bit-level Analysis**
 
@@ -460,6 +472,12 @@ Different algorithms exhibit varying effectiveness depending on data characteris
 - **Repetitiveness**: LZW excels at capturing repeated patterns of varying lengths
 - **Sequential correlation**: Delta encoding is most effective for smooth sequences with high autocorrelation
 - **Value distribution**: Dictionary encoding works best for data with low cardinality relative to dataset size
+
+Figure 4.3 provides a comprehensive comparison of compression techniques across different scenarios:
+
+![Compression Techniques Comparison](thesis_figures/compression_comparison_chart.md)
+
+**Figure 4.3**: Comparative analysis of compression algorithms across different metrics including compression ratio, speed, and best application scenarios.
 
 #### 4.3.2 Algorithmic Trade-offs
 
@@ -803,7 +821,13 @@ def for_decode(reference, offsets, bits_per_value=None):
 
 ### 5.2 Adaptive Compression Framework
 
-The core of this research is the adaptive compression framework that dynamically selects and applies optimal compression techniques based on data and system characteristics. The implementation consists of the following key components:
+The core of this research is the adaptive compression framework that dynamically selects and applies optimal compression techniques based on data and system characteristics. Figure 5.1 illustrates the architecture of this framework:
+
+![Adaptive Compression Framework Architecture](thesis_figures/compression_framework_diagram.md)
+
+**Figure 5.1**: Architecture of the proposed adaptive compression framework showing the data flow and decision processes for algorithm selection.
+
+The implementation consists of the following key components:
 
 ```python
 class AdaptiveCompressionFramework:

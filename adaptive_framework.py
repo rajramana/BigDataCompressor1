@@ -1,6 +1,7 @@
 import numpy as np
 import math
-from collections import Counter
+import time
+
 import compression_algorithms as ca
 import utils
 
@@ -10,138 +11,111 @@ class AdaptiveCompressionFramework:
     based on data characteristics and system constraints
     """
     def __init__(self):
+        # Define available algorithms with their properties
         self.algorithms = {
-            'huffman': {
-                'compress': ca.huffman_coding_demo,
-                'decompress': None,  # Simplified for demonstration
-                'data_types': ['text', 'categorical'],
-                'speed_priority': 'medium',
-                'ratio_priority': 'high'
+            "huffman": {
+                "data_types": ["text", "binary"],
+                "speed_priority": "medium",
+                "ratio_priority": "high"
             },
-            'delta': {
-                'compress': ca.delta_encode,
-                'decompress': ca.delta_decode,
-                'data_types': ['numerical', 'time_series'],
-                'speed_priority': 'high',
-                'ratio_priority': 'medium'
+            "delta": {
+                "data_types": ["numerical", "time_series"],
+                "speed_priority": "very_high",
+                "ratio_priority": "medium"
             },
-            'delta_of_delta': {
-                'compress': ca.delta_of_delta_encode,
-                'decompress': ca.delta_of_delta_decode,
-                'data_types': ['time_series'],
-                'speed_priority': 'medium',
-                'ratio_priority': 'high'
+            "delta_of_delta": {
+                "data_types": ["time_series"],
+                "speed_priority": "high",
+                "ratio_priority": "high"
             },
-            'lzw': {
-                'compress': ca.lzw_compress,
-                'decompress': ca.lzw_decompress,
-                'data_types': ['text', 'mixed'],
-                'speed_priority': 'medium',
-                'ratio_priority': 'high'
+            "lzw": {
+                "data_types": ["text", "binary", "mixed"],
+                "speed_priority": "medium",
+                "ratio_priority": "medium"
             },
-            'rle': {
-                'compress': ca.rle_encode,
-                'decompress': ca.rle_decode,
-                'data_types': ['binary', 'categorical'],
-                'speed_priority': 'very_high',
-                'ratio_priority': 'low'
+            "rle": {
+                "data_types": ["binary", "categorical", "text"],
+                "speed_priority": "very_high",
+                "ratio_priority": "low"
             },
-            'dictionary': {
-                'compress': ca.dictionary_encode,
-                'decompress': ca.dictionary_decode,
-                'data_types': ['categorical'],
-                'speed_priority': 'high',
-                'ratio_priority': 'medium'
+            "dictionary": {
+                "data_types": ["categorical", "text"],
+                "speed_priority": "high",
+                "ratio_priority": "high"
             },
-            'for': {
-                'compress': ca.for_encode,
-                'decompress': ca.for_decode,
-                'data_types': ['numerical'],
-                'speed_priority': 'high',
-                'ratio_priority': 'medium'
+            "for": {
+                "data_types": ["numerical", "time_series"],
+                "speed_priority": "high",
+                "ratio_priority": "medium"
             }
+        }
+        
+        # Priority level mapping (for scoring)
+        self.priority_scores = {
+            "low": 1,
+            "medium": 2,
+            "high": 3,
+            "very_high": 4
         }
     
     def analyze_data(self, data):
         """
         Analyze data characteristics to determine suitable compression algorithms
+        
+        Parameters:
+        -----------
+        data : object
+            The data to analyze
+            
+        Returns:
+        --------
+        dict
+            Dictionary containing analysis results
         """
-        analysis = {}
+        # Get representative sample of data for analysis
+        sample_data = utils.get_sample_data(data)
         
-        # Determine data type
-        if isinstance(data, str):
-            analysis['data_type'] = 'text'
-        elif isinstance(data, (list, np.ndarray)):
-            if len(data) == 0:
-                analysis['data_type'] = 'unknown'
-            elif isinstance(data[0], (int, float, np.number)):
-                # Check for time series characteristics
-                if len(data) > 10:
-                    # Calculate autocorrelation to detect time series
-                    autocorr = np.corrcoef(data[:-1], data[1:])[0, 1]
-                    if autocorr > 0.7:
-                        analysis['data_type'] = 'time_series'
-                    else:
-                        analysis['data_type'] = 'numerical'
-                else:
-                    analysis['data_type'] = 'numerical'
-            elif isinstance(data[0], str):
-                # Check cardinality ratio to detect categorical data
-                unique_ratio = len(set(data)) / len(data)
-                if unique_ratio < 0.1:
-                    analysis['data_type'] = 'categorical'
-                else:
-                    analysis['data_type'] = 'text'
-            else:
-                analysis['data_type'] = 'mixed'
-        elif isinstance(data, bytes):
-            analysis['data_type'] = 'binary'
-        else:
-            analysis['data_type'] = 'unknown'
+        # Detect data type
+        data_type = utils.detect_data_type(sample_data)
         
-        # Calculate entropy for text or binary data
-        if analysis['data_type'] in ['text', 'binary', 'categorical']:
+        # Initialize analysis results
+        analysis = {
+            "data_type": data_type
+        }
+        
+        # Calculate entropy (for all data types)
+        try:
+            entropy = utils.calculate_entropy(sample_data)
+            analysis["entropy"] = entropy
+        except:
+            # Skip entropy calculation if not applicable
+            pass
+        
+        # Analyze run-length characteristics (useful for RLE)
+        try:
+            run_analysis = utils.analyze_runs(sample_data)
+            analysis.update(run_analysis)
+        except:
+            # Skip run analysis if not applicable
+            pass
+        
+        # Analyze numerical data compression potential
+        if data_type in ["numerical", "time_series"]:
             try:
-                counter = Counter(data)
-                total = sum(counter.values())
-                probabilities = [count / total for count in counter.values()]
-                analysis['entropy'] = -sum(p * math.log2(p) for p in probabilities)
+                range_analysis = utils.analyze_range_compression(sample_data)
+                analysis.update(range_analysis)
             except:
-                analysis['entropy'] = 8.0  # Default value if calculation fails
+                # Skip range analysis if not applicable
+                pass
         
-        # Analyze run lengths for RLE potential
-        if analysis['data_type'] in ['binary', 'categorical', 'numerical']:
+        # Analyze dictionary compression potential
+        if data_type in ["categorical", "text", "mixed"]:
             try:
-                runs = 1
-                for i in range(1, len(data)):
-                    if data[i] != data[i-1]:
-                        runs += 1
-                analysis['run_ratio'] = runs / len(data)
+                dict_analysis = utils.calculate_dictionary_potential(sample_data)
+                analysis.update(dict_analysis)
             except:
-                analysis['run_ratio'] = 1.0  # Default value if calculation fails
-        
-        # Analyze value range for FOR potential
-        if analysis['data_type'] in ['numerical', 'time_series']:
-            try:
-                data_arr = np.array(data)
-                min_val = np.min(data_arr)
-                max_val = np.max(data_arr)
-                range_val = max_val - min_val
-                
-                # Estimate bits needed for full values vs. offsets
-                if max_val > 0:
-                    full_bits = math.ceil(math.log2(max_val + 1))
-                else:
-                    full_bits = 1
-                
-                if range_val > 0:
-                    offset_bits = math.ceil(math.log2(range_val + 1))
-                else:
-                    offset_bits = 1
-                
-                analysis['range_compression_potential'] = full_bits / offset_bits
-            except:
-                analysis['range_compression_potential'] = 1.0  # Default value if calculation fails
+                # Skip dictionary analysis if not applicable
+                pass
         
         return analysis
     
@@ -149,145 +123,304 @@ class AdaptiveCompressionFramework:
         """
         Select the most appropriate compression algorithm based on data analysis
         and system constraints
+        
+        Parameters:
+        -----------
+        analysis : dict
+            Dictionary with data analysis results
+        constraints : dict, optional
+            Dictionary with system constraints (e.g., speed_priority, ratio_priority)
+            
+        Returns:
+        --------
+        str
+            Name of the selected algorithm
         """
+        # Default constraints if none provided
         if constraints is None:
-            constraints = {'speed_priority': 'medium', 'ratio_priority': 'medium'}
+            constraints = {
+                "speed_priority": "medium",
+                "ratio_priority": "medium"
+            }
         
-        # Filter algorithms suitable for the data type
-        data_type = analysis.get('data_type', 'unknown')
-        candidates = []
+        # Normalize constraints
+        speed_priority = constraints.get("speed_priority", "medium")
+        ratio_priority = constraints.get("ratio_priority", "medium")
         
-        for algo_name, algo_info in self.algorithms.items():
-            if data_type in algo_info['data_types'] or 'all' in algo_info['data_types']:
-                candidates.append(algo_name)
+        # Get data type
+        data_type = analysis.get("data_type", "unknown")
         
-        if not candidates:
-            # Fallback to general-purpose algorithms
-            candidates = ['lzw', 'huffman']
+        # Filter algorithms suitable for this data type
+        suitable_algorithms = []
+        for algo_name, algo_props in self.algorithms.items():
+            if data_type in algo_props["data_types"] or "mixed" in algo_props["data_types"]:
+                suitable_algorithms.append(algo_name)
         
-        # Score candidates based on analysis and constraints
-        scores = {}
-        for algo in candidates:
-            score = 0
-            
-            # Score based on speed priority
-            speed_map = {'very_high': 3, 'high': 2, 'medium': 1, 'low': 0}
-            algo_speed = speed_map.get(self.algorithms[algo]['speed_priority'], 1)
-            req_speed = speed_map.get(constraints['speed_priority'], 1)
-            
-            if algo_speed >= req_speed:
-                score += algo_speed
-            else:
-                score -= (req_speed - algo_speed) * 2  # Penalty for not meeting speed requirement
-            
-            # Score based on compression ratio priority
-            ratio_map = {'very_high': 3, 'high': 2, 'medium': 1, 'low': 0}
-            algo_ratio = ratio_map.get(self.algorithms[algo]['ratio_priority'], 1)
-            req_ratio = ratio_map.get(constraints['ratio_priority'], 1)
-            
-            if algo_ratio >= req_ratio:
-                score += algo_ratio
-            else:
-                score -= (req_ratio - algo_ratio) * 2  # Penalty for not meeting ratio requirement
-            
-            # Additional scores based on data characteristics
-            if algo == 'rle' and analysis.get('run_ratio', 1.0) < 0.1:
-                score += 5  # Bonus for RLE if there are few runs
-            
-            if algo in ['for', 'delta'] and analysis.get('range_compression_potential', 1.0) > 4:
-                score += 3  # Bonus for FOR/delta if range compression is promising
-            
-            if algo == 'huffman' and analysis.get('entropy', 8.0) < 3.0:
-                score += 4  # Bonus for Huffman if entropy is low
-            
-            if algo == 'delta_of_delta' and data_type == 'time_series':
-                score += 2  # Bonus for delta-of-delta on time series
-            
-            if algo == 'dictionary' and data_type == 'categorical':
-                score += 3  # Bonus for dictionary encoding on categorical
-            
-            scores[algo] = score
+        # If no suitable algorithms found, fallback to general-purpose ones
+        if not suitable_algorithms:
+            suitable_algorithms = ["lzw", "huffman"]
         
-        # Select the highest scoring algorithm
-        if not scores:
-            return 'lzw'  # Default fallback
+        # Score algorithms based on constraints and data characteristics
+        algorithm_scores = {}
         
-        selected = max(scores.items(), key=lambda x: x[1])[0]
-        return selected
+        for algo_name in suitable_algorithms:
+            # Base score from constraint matching
+            algo_props = self.algorithms[algo_name]
+            speed_score = self._match_priority_score(algo_props["speed_priority"], speed_priority)
+            ratio_score = self._match_priority_score(algo_props["ratio_priority"], ratio_priority)
+            
+            # Base score is weighted sum of speed and ratio scores
+            base_score = speed_score + ratio_score
+            
+            # Additional scoring based on data characteristics
+            bonus = 0
+            
+            # Low entropy favors Huffman coding
+            if "entropy" in analysis and algo_name == "huffman":
+                # Lower entropy (closer to 0) means better Huffman performance
+                entropy_bonus = max(0, 5 - analysis["entropy"])
+                bonus += entropy_bonus
+            
+            # Low run ratio favors RLE
+            if "run_ratio" in analysis and algo_name == "rle":
+                # Lower run ratio means better RLE performance
+                run_bonus = max(0, 3 * (1 - analysis["run_ratio"]))
+                bonus += run_bonus
+            
+            # High range compression potential favors FOR and Delta encoding
+            if "range_compression_potential" in analysis:
+                if algo_name in ["for", "delta"]:
+                    range_bonus = min(3, analysis["range_compression_potential"] / 10)
+                    bonus += range_bonus
+            
+            # High dictionary potential favors Dictionary encoding
+            if "dictionary_potential" in analysis and algo_name == "dictionary":
+                dict_bonus = min(3, analysis["dictionary_potential"] * 5)
+                bonus += dict_bonus
+            
+            # Time series data favors delta-of-delta for smooth series
+            if data_type == "time_series" and algo_name == "delta_of_delta":
+                # Bonus for delta-of-delta on time series
+                bonus += 1
+            
+            # Final score
+            algorithm_scores[algo_name] = base_score + bonus
+        
+        # Select algorithm with highest score
+        selected_algorithm = max(algorithm_scores.items(), key=lambda x: x[1])[0]
+        
+        return selected_algorithm
     
     def compress(self, data, constraints=None):
         """
         Compress data using adaptively selected algorithm
+        
+        Parameters:
+        -----------
+        data : object
+            The data to compress
+        constraints : dict, optional
+            Dictionary with system constraints
+            
+        Returns:
+        --------
+        dict
+            Dictionary with compression results
         """
+        # Analyze data
         analysis = self.analyze_data(data)
-        selected_algo = self.select_algorithm(analysis, constraints)
+        
+        # Select algorithm
+        algorithm = self.select_algorithm(analysis, constraints)
         
         # Apply selected algorithm
-        compress_func = self.algorithms[selected_algo]['compress']
-        compressed_data = compress_func(data)
+        start_time = time.time()
         
-        # Calculate compression statistics
-        original_size = utils.get_data_size(data)
-        if isinstance(compressed_data, tuple):
-            # Some algorithms return multiple values
-            compressed_size = sum(utils.get_data_size(item) for item in compressed_data)
+        # Different handling for different algorithms
+        if algorithm == "huffman":
+            compressed_size, compression_ratio, codes = ca.huffman_coding_demo(data)
+            compressed_data = None  # Huffman demo doesn't return actual compressed data
+        elif algorithm == "delta":
+            first_value, deltas = ca.delta_encode(data)
+            compressed_data = (first_value, deltas)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 64
+            delta_bits = sum(utils.estimate_bits_needed(deltas))
+            compressed_size = 64 + delta_bits  # First value + deltas
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        elif algorithm == "delta_of_delta":
+            first_value, first_delta, second_deltas = ca.delta_of_delta_encode(data)
+            compressed_data = (first_value, first_delta, second_deltas)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 64
+            delta_bits = sum(utils.estimate_bits_needed(second_deltas))
+            compressed_size = 64 + 64 + delta_bits  # First value + first delta + second deltas
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        elif algorithm == "lzw":
+            compressed_data = ca.lzw_compress(data)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 8
+            dict_size = 256 + len(compressed_data)
+            bits_per_code = max(8, math.ceil(math.log2(dict_size)))
+            compressed_size = len(compressed_data) * bits_per_code
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        elif algorithm == "rle":
+            compressed_data = ca.rle_encode(data)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 8
+            compressed_size = len(compressed_data) * 16  # Each run is (value, count)
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        elif algorithm == "dictionary":
+            encoded, value_to_id = ca.dictionary_encode(data)
+            compressed_data = (encoded, value_to_id)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 8
+            dict_size_bits = len(value_to_id) * 16
+            id_bits = max(1, math.ceil(math.log2(len(value_to_id))))
+            encoded_bits = len(encoded) * id_bits
+            compressed_size = dict_size_bits + encoded_bits
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        elif algorithm == "for":
+            reference, offsets, bits_per_value = ca.for_encode(data)
+            compressed_data = (reference, offsets, bits_per_value)
+            # Calculate approximate compression metrics
+            original_size = len(data) * 8 if isinstance(data, str) else len(data) * 64
+            compressed_size = 64 + len(offsets) * bits_per_value
+            compression_ratio = (1 - compressed_size / original_size) * 100
+        
+        compression_time = time.time() - start_time
+        
+        # Convert to bytes for consistent handling
+        if isinstance(compressed_size, int):
+            compressed_size = compressed_size // 8
         else:
-            compressed_size = utils.get_data_size(compressed_data)
+            compressed_size = int(compressed_size // 8)
+            
+        if isinstance(original_size, int):
+            original_size = original_size // 8
+        else:
+            original_size = int(original_size // 8)
         
-        compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
-        
-        # Return compressed data along with algorithm info for decompression
+        # Return results
         return {
-            'algorithm': selected_algo,
-            'compressed_data': compressed_data,
-            'analysis': analysis,
-            'original_size': original_size,
-            'compressed_size': compressed_size,
-            'compression_ratio': compression_ratio
+            "algorithm": algorithm,
+            "compressed_data": compressed_data,
+            "original_size": original_size,
+            "compressed_size": compressed_size,
+            "compression_ratio": compression_ratio,
+            "compression_time": compression_time,
+            "analysis": analysis
         }
     
     def decompress(self, compression_result):
         """
         Decompress data using the algorithm specified in compression_result
+        
+        Parameters:
+        -----------
+        compression_result : dict
+            Dictionary with compression results from the compress method
+            
+        Returns:
+        --------
+        object
+            The decompressed data
         """
-        algorithm = compression_result['algorithm']
-        compressed_data = compression_result['compressed_data']
+        algorithm = compression_result["algorithm"]
+        compressed_data = compression_result["compressed_data"]
         
-        decompress_func = self.algorithms[algorithm]['decompress']
-        if decompress_func is None:
-            return compressed_data  # For algorithms without explicit decompression
-        
-        return decompress_func(*compressed_data if isinstance(compressed_data, tuple) else compressed_data)
-
+        # Apply decompression for the specific algorithm
+        if algorithm == "huffman":
+            # Huffman demo doesn't return actual compressed data
+            return None
+        elif algorithm == "delta":
+            first_value, deltas = compressed_data
+            return ca.delta_decode(first_value, deltas)
+        elif algorithm == "delta_of_delta":
+            first_value, first_delta, second_deltas = compressed_data
+            return ca.delta_of_delta_decode(first_value, first_delta, second_deltas)
+        elif algorithm == "lzw":
+            return ca.lzw_decompress(compressed_data)
+        elif algorithm == "rle":
+            return ca.rle_decode(compressed_data)
+        elif algorithm == "dictionary":
+            encoded, value_to_id = compressed_data
+            return ca.dictionary_decode(encoded, value_to_id)
+        elif algorithm == "for":
+            reference, offsets, bits_per_value = compressed_data
+            return ca.for_decode(reference, offsets, bits_per_value)
+    
     def get_algorithm_details(self):
         """
         Get details about all available algorithms
+        
+        Returns:
+        --------
+        dict
+            Dictionary with information about available algorithms
         """
-        return {
-            algo_name: {
-                'data_types': info['data_types'],
-                'speed_priority': info['speed_priority'],
-                'ratio_priority': info['ratio_priority']
-            }
-            for algo_name, info in self.algorithms.items()
-        }
-
+        return self.algorithms
+    
     def get_data_type_recommendations(self, data_type):
         """
         Get algorithm recommendations for a specific data type
-        """
-        recommendations = []
         
-        for algo_name, info in self.algorithms.items():
-            if data_type in info['data_types']:
+        Parameters:
+        -----------
+        data_type : str
+            Data type to get recommendations for
+            
+        Returns:
+        --------
+        list
+            List of recommended algorithms with their properties
+        """
+        # Validate data type
+        valid_types = ["text", "numerical", "time_series", "categorical", "binary", "mixed"]
+        if data_type not in valid_types:
+            data_type = "mixed"  # Default to mixed
+        
+        # Find suitable algorithms
+        recommendations = []
+        for algo_name, algo_props in self.algorithms.items():
+            if data_type in algo_props["data_types"] or "mixed" in algo_props["data_types"]:
                 recommendations.append({
-                    'algorithm': algo_name,
-                    'speed_priority': info['speed_priority'],
-                    'ratio_priority': info['ratio_priority']
+                    "algorithm": algo_name,
+                    "speed_priority": algo_props["speed_priority"],
+                    "ratio_priority": algo_props["ratio_priority"]
                 })
         
-        # Sort by ratio priority (high to low)
-        ratio_map = {'very_high': 4, 'high': 3, 'medium': 2, 'low': 1}
-        recommendations.sort(key=lambda x: ratio_map.get(x['ratio_priority'], 0), reverse=True)
+        # Sort by ratio priority (higher to lower)
+        recommendations.sort(
+            key=lambda x: self.priority_scores[x["ratio_priority"]], 
+            reverse=True
+        )
         
         return recommendations
+    
+    def _match_priority_score(self, algorithm_priority, user_priority):
+        """
+        Calculate priority match score between algorithm and user priorities
+        
+        Parameters:
+        -----------
+        algorithm_priority : str
+            Algorithm's priority level
+        user_priority : str
+            User's priority level
+            
+        Returns:
+        --------
+        float
+            Score representing how well the priorities match
+        """
+        algo_score = self.priority_scores.get(algorithm_priority, 2)
+        user_score = self.priority_scores.get(user_priority, 2)
+        
+        # Higher score if priorities match, lower if they diverge
+        if algo_score == user_score:
+            return 3.0
+        elif abs(algo_score - user_score) == 1:
+            return 2.0
+        else:
+            return 1.0

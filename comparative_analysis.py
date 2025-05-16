@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
-import streamlit as st
+import random
+
 import compression_algorithms as ca
 import data_generator as dg
 import utils
@@ -23,61 +24,48 @@ def benchmark_algorithms(data, algorithms=None):
     pd.DataFrame
         DataFrame with benchmark results
     """
+    # Default to all algorithms if none specified
     if algorithms is None:
-        algorithms = ['Huffman', 'Delta', 'LZW', 'RLE', 'Dictionary', 'FOR']
+        algorithms = ['huffman', 'delta', 'delta_of_delta', 'lzw', 'rle', 'dictionary', 'for']
     
+    # Validate input
+    valid_algorithms = ['huffman', 'delta', 'delta_of_delta', 'lzw', 'rle', 'dictionary', 'for']
+    algorithms = [algo for algo in algorithms if algo in valid_algorithms]
+    
+    # Store results
     results = []
     
-    for algo_name in algorithms:
+    # Benchmark each algorithm
+    for algorithm in algorithms:
         try:
-            # Get original size
-            original_size = utils.get_data_size(data)
-            
-            # Measure compression time
-            start_time = time.time()
-            compressed_data = utils.compress_with_algorithm(algo_name, data)
-            compression_time = time.time() - start_time
-            
-            # Get compressed size
-            compressed_size = utils.get_data_size(compressed_data)
-            
-            # Measure decompression time
-            start_time = time.time()
-            decompressed_data = utils.decompress_with_algorithm(algo_name, compressed_data)
-            decompression_time = time.time() - start_time
-            
-            # Verify correctness (not always possible due to data types)
-            try:
-                is_correct = utils.verify_decompression(data, decompressed_data)
-            except:
-                is_correct = "N/A"
-            
-            # Calculate compression ratio
-            compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
-            
-            results.append({
-                'Algorithm': algo_name,
-                'Original Size (bytes)': original_size,
-                'Compressed Size (bytes)': compressed_size,
-                'Compression Ratio (%)': compression_ratio,
-                'Compression Time (s)': compression_time,
-                'Decompression Time (s)': decompression_time,
-                'Correctness': is_correct
-            })
+            result = ca.benchmark_compression(algorithm, data)
+            results.append(result)
         except Exception as e:
-            # Some algorithms may not work on certain data types
+            # Add failed result
             results.append({
-                'Algorithm': algo_name,
-                'Original Size (bytes)': utils.get_data_size(data),
-                'Compressed Size (bytes)': 'N/A',
-                'Compression Ratio (%)': 'N/A',
-                'Compression Time (s)': 'N/A',
-                'Decompression Time (s)': 'N/A',
-                'Correctness': 'N/A',
-                'Error': str(e)
+                'algorithm': algorithm,
+                'original_size': None,
+                'compressed_size': None,
+                'compression_ratio': None,
+                'compression_time': None,
+                'decompression_time': None,
+                'error': str(e)
             })
     
-    return pd.DataFrame(results)
+    # Convert to DataFrame
+    df = pd.DataFrame(results)
+    
+    # Add speed columns (bytes per second)
+    df['compression_speed'] = df.apply(
+        lambda row: row['original_size'] / row['compression_time'] if row['compression_time'] else None, 
+        axis=1
+    )
+    df['decompression_speed'] = df.apply(
+        lambda row: row['compressed_size'] / row['decompression_time'] if row['decompression_time'] else None, 
+        axis=1
+    )
+    
+    return df
 
 def compare_across_data_types():
     """
@@ -89,24 +77,39 @@ def compare_across_data_types():
         DataFrame with results for different data types
     """
     # Generate different types of data
+    time_series = dg.generate_time_series(1000)
+    text = dg.generate_text_data(500)
+    categorical = dg.generate_categorical_data(1000, 20, "skewed")
+    binary_low = dg.generate_binary_data(1000, "low")
+    binary_high = dg.generate_binary_data(1000, "high")
+    
+    # Define data types and corresponding datasets
     data_types = {
-        'Text': dg.generate_text_data(1000),
-        'Time Series': dg.generate_time_series(1000),
-        'Categorical': dg.generate_categorical_data(1000, 20, 'skewed'),
-        'Binary (Low Entropy)': dg.generate_binary_data(1000, 'low'),
-        'Binary (High Entropy)': dg.generate_binary_data(1000, 'high')
+        "Time Series": time_series,
+        "Text": text,
+        "Categorical": categorical,
+        "Binary (Low Entropy)": binary_low,
+        "Binary (High Entropy)": binary_high
     }
     
-    algorithms = ['Huffman', 'Delta', 'LZW', 'RLE', 'Dictionary']
+    # Store results
     all_results = []
     
+    # Benchmark each data type
     for data_type, data in data_types.items():
-        # Benchmark each algorithm on this data type
-        results = benchmark_algorithms(data, algorithms)
-        results['Data Type'] = data_type
-        all_results.append(results)
+        # Run benchmarks
+        df = benchmark_algorithms(data)
+        
+        # Add data type column
+        df['data_type'] = data_type
+        
+        # Append to results
+        all_results.append(df)
     
-    return pd.concat(all_results, ignore_index=True)
+    # Combine results
+    combined_df = pd.concat(all_results, ignore_index=True)
+    
+    return combined_df
 
 def compare_compression_speeds(data_sizes=None):
     """
@@ -122,22 +125,34 @@ def compare_compression_speeds(data_sizes=None):
     pd.DataFrame
         DataFrame with compression speeds for different data sizes
     """
+    # Default sizes if none provided
     if data_sizes is None:
         data_sizes = [1000, 10000, 100000]
     
-    algorithms = ['Huffman', 'Delta', 'LZW', 'RLE', 'Dictionary']
+    # Define algorithms to test
+    algorithms = ['huffman', 'delta', 'lzw', 'rle', 'dictionary', 'for']
+    
+    # Store results
     all_results = []
     
+    # Test with text data
     for size in data_sizes:
-        # Generate text data of the specified size
-        data = dg.generate_text_data(size // 10)  # Each word is roughly 10 bytes
+        # Generate text data
+        data = dg.generate_text_data(size // 10)  # Each word is roughly 10 chars
         
-        # Benchmark each algorithm
-        results = benchmark_algorithms(data, algorithms)
-        results['Data Size'] = size
-        all_results.append(results)
+        # Run benchmarks
+        df = benchmark_algorithms(data, algorithms)
+        
+        # Add size column
+        df['data_size'] = size
+        
+        # Append to results
+        all_results.append(df)
     
-    return pd.concat(all_results, ignore_index=True)
+    # Combine results
+    combined_df = pd.concat(all_results, ignore_index=True)
+    
+    return combined_df
 
 def visualize_compression_comparison(results):
     """
@@ -153,105 +168,56 @@ def visualize_compression_comparison(results):
     fig
         Matplotlib figure with visualizations
     """
-    # Create a figure with multiple subplots
+    # Create figure with subplots
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Plot compression ratio
-    if 'Data Type' in results.columns:
-        # Grouped by data type and algorithm
-        pivot_ratio = results.pivot_table(
-            values='Compression Ratio (%)', 
-            index='Data Type', 
-            columns='Algorithm',
-            aggfunc='mean'
-        )
-        pivot_ratio.plot(kind='bar', ax=axes[0, 0], rot=45)
-    else:
-        # Just by algorithm
-        results.plot(
-            x='Algorithm', 
-            y='Compression Ratio (%)', 
-            kind='bar', 
-            ax=axes[0, 0]
-        )
-    
+    # Compression Ratio Comparison (by algorithm)
     axes[0, 0].set_title('Compression Ratio by Algorithm')
+    avg_ratios = results.groupby('algorithm')['compression_ratio'].mean()
+    avg_ratios.plot(kind='bar', ax=axes[0, 0], color='skyblue')
     axes[0, 0].set_ylabel('Compression Ratio (%)')
-    axes[0, 0].grid(axis='y', alpha=0.3)
+    axes[0, 0].set_ylim(0, 100)
+    axes[0, 0].grid(axis='y', linestyle='--', alpha=0.7)
     
-    # Plot compression time
-    if 'Data Type' in results.columns:
-        pivot_time = results.pivot_table(
-            values='Compression Time (s)', 
-            index='Data Type', 
-            columns='Algorithm',
-            aggfunc='mean'
-        )
-        pivot_time.plot(kind='bar', ax=axes[0, 1], rot=45)
-    else:
-        results.plot(
-            x='Algorithm', 
-            y='Compression Time (s)', 
-            kind='bar', 
-            ax=axes[0, 1]
-        )
+    # Compression Speed Comparison
+    axes[0, 1].set_title('Compression Speed by Algorithm')
+    avg_speeds = results.groupby('algorithm')['compression_speed'].mean() / 1024  # KB/s
+    avg_speeds.plot(kind='bar', ax=axes[0, 1], color='lightgreen')
+    axes[0, 1].set_ylabel('Speed (KB/s)')
+    axes[0, 1].grid(axis='y', linestyle='--', alpha=0.7)
     
-    axes[0, 1].set_title('Compression Time by Algorithm')
-    axes[0, 1].set_ylabel('Time (seconds)')
-    axes[0, 1].grid(axis='y', alpha=0.3)
-    
-    # Plot decompression time
-    if 'Data Type' in results.columns:
-        pivot_decomp = results.pivot_table(
-            values='Decompression Time (s)', 
-            index='Data Type', 
-            columns='Algorithm',
-            aggfunc='mean'
+    # Compression Ratio by Data Type (if data_type column exists)
+    if 'data_type' in results.columns:
+        pivot_ratio = results.pivot_table(
+            index='algorithm', columns='data_type', values='compression_ratio'
         )
-        pivot_decomp.plot(kind='bar', ax=axes[1, 0], rot=45)
-    else:
-        results.plot(
-            x='Algorithm', 
-            y='Decompression Time (s)', 
-            kind='bar', 
-            ax=axes[1, 0]
-        )
+        pivot_ratio.plot(kind='bar', ax=axes[1, 0])
+        axes[1, 0].set_title('Compression Ratio by Data Type')
+        axes[1, 0].set_ylabel('Compression Ratio (%)')
+        axes[1, 0].set_ylim(0, 100)
+        axes[1, 0].legend(title='Data Type')
+        axes[1, 0].grid(axis='y', linestyle='--', alpha=0.7)
     
-    axes[1, 0].set_title('Decompression Time by Algorithm')
-    axes[1, 0].set_ylabel('Time (seconds)')
-    axes[1, 0].grid(axis='y', alpha=0.3)
-    
-    # Plot compression vs. decompression time
-    if 'Data Type' not in results.columns:
-        results.plot(
-            x='Compression Time (s)', 
-            y='Decompression Time (s)', 
-            kind='scatter', 
-            ax=axes[1, 1]
-        )
+    # Compression vs Decompression Speed
+    if 'decompression_speed' in results.columns:
+        # Calculate average speeds
+        avg_comp = results.groupby('algorithm')['compression_speed'].mean() / 1024  # KB/s
+        avg_decomp = results.groupby('algorithm')['decompression_speed'].mean() / 1024  # KB/s
         
-        for i, row in results.iterrows():
-            axes[1, 1].annotate(
-                row['Algorithm'], 
-                (row['Compression Time (s)'], row['Decompression Time (s)']),
-                xytext=(5, 5),
-                textcoords='offset points'
-            )
-    else:
-        # Alternative plot for data type comparison
-        pivot_size = results.pivot_table(
-            values='Compressed Size (bytes)', 
-            index='Data Type', 
-            columns='Algorithm',
-            aggfunc='mean'
-        )
-        pivot_size.plot(kind='bar', ax=axes[1, 1], rot=45)
-        axes[1, 1].set_title('Compressed Size by Algorithm')
-        axes[1, 1].set_ylabel('Size (bytes)')
-    
-    axes[1, 1].grid(alpha=0.3)
+        # Combine into DataFrame
+        speed_df = pd.DataFrame({
+            'Compression': avg_comp,
+            'Decompression': avg_decomp
+        })
+        
+        # Plot
+        speed_df.plot(kind='bar', ax=axes[1, 1])
+        axes[1, 1].set_title('Compression vs Decompression Speed')
+        axes[1, 1].set_ylabel('Speed (KB/s)')
+        axes[1, 1].grid(axis='y', linestyle='--', alpha=0.7)
     
     plt.tight_layout()
+    
     return fig
 
 def analyze_algorithm_use_cases():
@@ -263,52 +229,37 @@ def analyze_algorithm_use_cases():
     dict
         Dictionary with use cases and recommended algorithms
     """
+    # Define use cases
     use_cases = {
-        'Real-time Data Streaming': {
-            'Description': 'Applications requiring real-time compression/decompression with minimal latency',
-            'Key Requirements': 'Fast compression/decompression, moderate compression ratio',
-            'Recommended Algorithms': ['LZ4', 'Snappy', 'Delta encoding'],
-            'Not Recommended': ['LZMA', 'Huffman (alone)'],
-            'Implementation Notes': 'Use chunked data processing to minimize latency'
+        "Time Series Data Storage": {
+            "description": "Storing large volumes of time series data with moderate access frequency",
+            "data_characteristics": "Sequential numerical data with trends and patterns",
+            "algorithms": ["delta", "delta_of_delta", "for"],
+            "reasoning": "Delta-based algorithms excel at compressing time series by storing differences between consecutive values, which are typically small."
         },
-        'Time Series Data': {
-            'Description': 'Sensor data, financial markets, IoT measurements',
-            'Key Requirements': 'Exploit temporal patterns and correlations',
-            'Recommended Algorithms': ['Delta encoding', 'Delta-of-delta', 'Gorilla'],
-            'Not Recommended': ['Dictionary encoding', 'LZW'],
-            'Implementation Notes': 'Consider different compression for different columns/metrics'
+        "Text Document Storage": {
+            "description": "Archiving text documents with infrequent access",
+            "data_characteristics": "Natural language text with word repetition and skewed character distribution",
+            "algorithms": ["huffman", "lzw"],
+            "reasoning": "Huffman coding leverages character frequency patterns, while LZW captures recurring phrases and patterns in text."
         },
-        'Log Files & Text Data': {
-            'Description': 'Server logs, text documents, configuration files',
-            'Key Requirements': 'Handle variable-length text efficiently',
-            'Recommended Algorithms': ['LZW', 'Huffman', 'Deflate/GZIP'],
-            'Not Recommended': ['RLE', 'Delta encoding'],
-            'Implementation Notes': 'Preprocess to normalize formats for better compression'
+        "Database Column Compression": {
+            "description": "Compressing database columns for improved I/O performance",
+            "data_characteristics": "Structured data with limited distinct values per column",
+            "algorithms": ["dictionary", "for", "rle"],
+            "reasoning": "Dictionary encoding is ideal for low-cardinality columns, FOR works well for numerical ranges, and RLE for columns with repeated values."
         },
-        'Database Columnar Storage': {
-            'Description': 'Column-oriented databases and warehouses',
-            'Key Requirements': 'Efficient compression of similar data types',
-            'Recommended Algorithms': [
-                'Dictionary encoding (low cardinality)', 
-                'RLE (repeated values)', 
-                'FOR/PFOR (numerical data)'
-            ],
-            'Not Recommended': ['One-size-fits-all approach'],
-            'Implementation Notes': 'Use different algorithms for different column types'
+        "Network Data Transfer": {
+            "description": "Compressing data for network transfer in distributed systems",
+            "data_characteristics": "Mixed data types with speed requirements",
+            "algorithms": ["lzw", "delta"],
+            "reasoning": "LZW offers good general-purpose compression with reasonable speed, while delta encoding is very fast for numerical data."
         },
-        'Distributed File Systems': {
-            'Description': 'Hadoop, S3, distributed filesystems',
-            'Key Requirements': 'Balance compression ratio and CPU usage',
-            'Recommended Algorithms': ['ZSTD', 'Brotli', 'GZIP'],
-            'Not Recommended': ['CPU-intensive algorithms for hot data'],
-            'Implementation Notes': 'Consider tiered compression strategies based on access patterns'
-        },
-        'Archival Storage': {
-            'Description': 'Long-term storage with infrequent access',
-            'Key Requirements': 'Maximum compression ratio, decompression speed more important than compression speed',
-            'Recommended Algorithms': ['LZMA', 'BZIP2', 'Combined algorithms'],
-            'Not Recommended': ['Speed-optimized algorithms'],
-            'Implementation Notes': 'Pre-process data to identify and exploit patterns'
+        "Real-time Sensor Data": {
+            "description": "Processing and storing real-time sensor readings",
+            "data_characteristics": "Continuous numerical data streams with high correlation",
+            "algorithms": ["delta", "rle"],
+            "reasoning": "Both algorithms offer extremely fast compression and decompression, critical for real-time applications."
         }
     }
     
@@ -323,96 +274,124 @@ def benchmark_on_distributed_scenario():
     dict
         Dictionary with distributed metrics
     """
-    # Simulate different nodes with different data characteristics
-    nodes = {
-        'Node1': {'data_type': 'Time Series', 'size': 50000, 'pattern': 'smooth'},
-        'Node2': {'data_type': 'Text', 'size': 100000, 'pattern': 'repetitive'},
-        'Node3': {'data_type': 'Categorical', 'size': 75000, 'pattern': 'skewed'},
-        'Node4': {'data_type': 'Binary', 'size': 80000, 'pattern': 'low'},
-        'Node5': {'data_type': 'Mixed', 'size': 60000, 'pattern': 'varied'}
+    # Generate a dataset representing a distributed data processing scenario
+    # Mix of numerical, categorical, and text data
+    n_records = 5000
+    dataset = dg.generate_mixed_dataset(n_records)
+    
+    # Define compression configurations to test
+    compression_configs = [
+        {"name": "No Compression", "algorithms": {}},
+        {"name": "Type-specific Compression", "algorithms": {
+            "numerical": "delta",
+            "categorical": "dictionary",
+            "text": "huffman"
+        }},
+        {"name": "Fast Compression", "algorithms": {
+            "numerical": "delta",
+            "categorical": "rle",
+            "text": "lzw"
+        }},
+        {"name": "High Ratio Compression", "algorithms": {
+            "numerical": "for",
+            "categorical": "dictionary",
+            "text": "huffman"
+        }}
+    ]
+    
+    # Simulate network bandwidths (bytes/second)
+    network_bandwidths = {
+        "Local Network (1 GB/s)": 1_000_000_000,
+        "WAN (100 MB/s)": 100_000_000,
+        "Internet (10 MB/s)": 10_000_000,
+        "Mobile (1 MB/s)": 1_000_000
     }
     
-    # Generate network bandwidth scenarios (MB/s)
-    network_scenarios = {
-        'Local Network': 1000,  # 1 GB/s
-        'WAN': 100,           # 100 MB/s
-        'Internet': 10,       # 10 MB/s
-        'Mobile': 1           # 1 MB/s
+    # Store results
+    results = {
+        "data_size": {},
+        "compression_time": {},
+        "decompression_time": {},
+        "transfer_time": {},
+        "total_time": {}
     }
     
-    algorithms = ['LZW', 'Huffman', 'Delta', 'RLE']
+    # Calculate original data size
+    original_size = 0
+    for column, data in dataset.items():
+        if isinstance(data, list):
+            # Estimate size
+            if all(isinstance(x, (int, float)) for x in data[:100]):
+                # Numerical data
+                original_size += len(data) * 8  # 8 bytes per float
+            elif all(isinstance(x, str) for x in data[:100]):
+                # Text/categorical data
+                original_size += sum(len(str(x)) for x in data)
     
-    # Calculate transfer times with and without compression
-    results = []
+    results["data_size"]["No Compression"] = original_size
     
-    for node_name, node_info in nodes.items():
-        # Generate appropriate data
-        if node_info['data_type'] == 'Time Series':
-            data = dg.generate_time_series(node_info['size'] // 8)  # 8 bytes per float64
-        elif node_info['data_type'] == 'Text':
-            data = dg.generate_text_data(node_info['size'] // 10)  # ~10 bytes per word
-        elif node_info['data_type'] == 'Categorical':
-            data = dg.generate_categorical_data(node_info['size'] // 10, 20, node_info['pattern'])
-        elif node_info['data_type'] == 'Binary':
-            data = dg.generate_binary_data(node_info['size'], node_info['pattern'])
-        else:  # Mixed
-            mixed_data = dg.generate_mixed_dataset(node_info['size'] // 100)  # Rough estimate
-            data = str(mixed_data)  # Convert to string for testing
+    # Simulate compression and transfer for each configuration
+    for config in compression_configs:
+        config_name = config["name"]
+        algorithms = config["algorithms"]
         
-        # Calculate uncompressed transfer time
-        original_size = utils.get_data_size(data)
+        if config_name == "No Compression":
+            # No compression benchmark
+            compressed_size = original_size
+            compression_time = 0
+            decompression_time = 0
+        else:
+            # Apply compression to each column based on data type
+            compressed_size = 0
+            compression_time = 0
+            decompression_time = 0
+            
+            for column, data in dataset.items():
+                # Detect data type
+                data_type = utils.detect_data_type(data)
+                
+                # Select algorithm (default to None)
+                algorithm = algorithms.get(data_type)
+                
+                if algorithm:
+                    # Benchmark compression
+                    result = ca.benchmark_compression(algorithm, data)
+                    
+                    # Accumulate metrics
+                    compressed_size += result.get("compressed_size", 0) or 0
+                    compression_time += result.get("compression_time", 0) or 0
+                    decompression_time += result.get("decompression_time", 0) or 0
+                else:
+                    # No compression for this column
+                    if isinstance(data, list):
+                        col_size = sum(len(str(x)) for x in data) if all(isinstance(x, str) for x in data[:10]) else len(data) * 8
+                    else:
+                        col_size = len(str(data))
+                    
+                    compressed_size += col_size
         
-        for algo_name in algorithms:
-            try:
-                # Compress the data
-                start_time = time.time()
-                compressed_data = utils.compress_with_algorithm(algo_name, data)
-                compression_time = time.time() - start_time
-                
-                # Calculate compressed size
-                compressed_size = utils.get_data_size(compressed_data)
-                
-                # Calculate compression ratio
-                compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
-                
-                # Calculate network transfer times for each scenario
-                for scenario, bandwidth in network_scenarios.items():
-                    # Convert sizes to MB for bandwidth calculation
-                    orig_size_mb = original_size / (1024 * 1024)
-                    comp_size_mb = compressed_size / (1024 * 1024)
-                    
-                    # Transfer times in seconds
-                    uncompressed_transfer = orig_size_mb / bandwidth
-                    compressed_transfer = comp_size_mb / bandwidth
-                    
-                    # Total time including compression
-                    total_time_with_compression = compression_time + compressed_transfer
-                    
-                    # Time saved
-                    time_saved = uncompressed_transfer - total_time_with_compression
-                    time_saved_percent = (time_saved / uncompressed_transfer) * 100 if uncompressed_transfer > 0 else 0
-                    
-                    results.append({
-                        'Node': node_name,
-                        'Data Type': node_info['data_type'],
-                        'Algorithm': algo_name,
-                        'Network Scenario': scenario,
-                        'Original Size (MB)': orig_size_mb,
-                        'Compressed Size (MB)': comp_size_mb,
-                        'Compression Ratio (%)': compression_ratio,
-                        'Compression Time (s)': compression_time,
-                        'Uncompressed Transfer Time (s)': uncompressed_transfer,
-                        'Compressed Transfer Time (s)': compressed_transfer,
-                        'Total Time With Compression (s)': total_time_with_compression,
-                        'Time Saved (s)': time_saved,
-                        'Time Saved (%)': time_saved_percent,
-                        'Worth Compressing': time_saved > 0
-                    })
-            except Exception as e:
-                # Skip failed algorithm for this data type
-                print(f"Error with {algo_name} on {node_name}: {e}")
+        # Store compression results
+        results["data_size"][config_name] = compressed_size
+        results["compression_time"][config_name] = compression_time
+        results["decompression_time"][config_name] = decompression_time
+        
+        # Calculate transfer times for different network speeds
+        transfer_times = {}
+        for network, bandwidth in network_bandwidths.items():
+            transfer_time = compressed_size / bandwidth
+            transfer_times[network] = transfer_time
+        
+        results["transfer_time"][config_name] = transfer_times
+        
+        # Calculate total processing times (compression + transfer + decompression)
+        total_times = {}
+        for network, transfer_time in transfer_times.items():
+            total_time = compression_time + transfer_time + decompression_time
+            total_times[network] = total_time
+        
+        results["total_time"][config_name] = total_times
     
-    return pd.DataFrame(results)
+    return results
 
 def get_algorithm_recommendations(data_type, data_size, access_pattern, network_speed):
     """
@@ -434,82 +413,135 @@ def get_algorithm_recommendations(data_type, data_size, access_pattern, network_
     dict
         Dictionary with algorithm recommendations
     """
-    recommendations = {}
-    
-    # Primary recommendation based on data type
-    if data_type == 'Text':
-        recommendations['primary'] = {
-            'algorithm': 'LZW or Deflate (GZIP)',
-            'reason': 'Effective for text with recurring patterns and phrases'
-        }
-    elif data_type == 'Time Series':
-        recommendations['primary'] = {
-            'algorithm': 'Delta Encoding',
-            'reason': 'Excellent for time series data where consecutive values are often similar'
-        }
-    elif data_type == 'Categorical':
-        recommendations['primary'] = {
-            'algorithm': 'Dictionary Encoding',
-            'reason': 'Optimal for categorical data with limited unique values'
-        }
-    elif data_type == 'Binary':
-        recommendations['primary'] = {
-            'algorithm': 'Huffman or Arithmetic Coding',
-            'reason': 'Adapts well to binary data distributions'
-        }
-    else:  # Mixed
-        recommendations['primary'] = {
-            'algorithm': 'Combined approach',
-            'reason': 'Use specialized algorithms for each column/data type'
-        }
-    
-    # Adjust for data size
-    if data_size == 'Large':
-        if access_pattern == 'Frequent':
-            recommendations['size_adjustment'] = {
-                'algorithm': 'Focus on speed: LZ4, Snappy',
-                'reason': 'Large datasets with frequent access require fast compression/decompression'
+    # Define recommendation weights
+    weights = {
+        # For different data types (compression_ratio, speed)
+        'data_type': {
+            'Text': {
+                'huffman': (0.9, 0.7),
+                'lzw': (0.8, 0.7),
+                'rle': (0.3, 0.9),
+                'dictionary': (0.7, 0.8),
+                'delta': (0.1, 0.9),
+                'delta_of_delta': (0.1, 0.8),
+                'for': (0.1, 0.9)
+            },
+            'Time Series': {
+                'huffman': (0.4, 0.7),
+                'lzw': (0.5, 0.7),
+                'rle': (0.3, 0.9),
+                'dictionary': (0.5, 0.8),
+                'delta': (0.9, 0.9),
+                'delta_of_delta': (0.95, 0.8),
+                'for': (0.8, 0.9)
+            },
+            'Categorical': {
+                'huffman': (0.6, 0.7),
+                'lzw': (0.7, 0.7),
+                'rle': (0.7, 0.9),
+                'dictionary': (0.95, 0.8),
+                'delta': (0.2, 0.9),
+                'delta_of_delta': (0.1, 0.8),
+                'for': (0.3, 0.9)
+            },
+            'Binary': {
+                'huffman': (0.7, 0.7),
+                'lzw': (0.8, 0.7),
+                'rle': (0.9, 0.9),
+                'dictionary': (0.5, 0.8),
+                'delta': (0.3, 0.9),
+                'delta_of_delta': (0.2, 0.8),
+                'for': (0.3, 0.9)
+            },
+            'Mixed': {
+                'huffman': (0.7, 0.7),
+                'lzw': (0.8, 0.7),
+                'rle': (0.5, 0.9),
+                'dictionary': (0.7, 0.8),
+                'delta': (0.6, 0.9),
+                'delta_of_delta': (0.5, 0.8),
+                'for': (0.6, 0.9)
             }
-        else:
-            recommendations['size_adjustment'] = {
-                'algorithm': 'Consider chunking with parallel compression',
-                'reason': 'Break large data into manageable chunks that can be processed in parallel'
+        },
+        
+        # Multipliers for data size
+        'data_size': {
+            'Small': {'compression_ratio': 0.7, 'speed': 1.3},
+            'Medium': {'compression_ratio': 1.0, 'speed': 1.0},
+            'Large': {'compression_ratio': 1.3, 'speed': 0.7}
+        },
+        
+        # Multipliers for access pattern
+        'access_pattern': {
+            'Frequent': {'compression_ratio': 0.7, 'speed': 1.3},
+            'Moderate': {'compression_ratio': 1.0, 'speed': 1.0},
+            'Rare': {'compression_ratio': 1.3, 'speed': 0.7}
+        },
+        
+        # Multipliers for network speed
+        'network_speed': {
+            'Fast': {'compression_ratio': 0.7, 'speed': 1.3},
+            'Medium': {'compression_ratio': 1.0, 'speed': 1.0},
+            'Slow': {'compression_ratio': 1.3, 'speed': 0.7}
+        }
+    }
+    
+    # Calculate scores for each algorithm
+    algorithm_scores = {}
+    
+    # Base weights from data type
+    data_type_weights = weights['data_type'].get(data_type, weights['data_type']['Mixed'])
+    
+    # Multipliers
+    size_multiplier = weights['data_size'].get(data_size, weights['data_size']['Medium'])
+    access_multiplier = weights['access_pattern'].get(access_pattern, weights['access_pattern']['Moderate'])
+    network_multiplier = weights['network_speed'].get(network_speed, weights['network_speed']['Medium'])
+    
+    # Calculate final scores
+    for algorithm, (ratio_weight, speed_weight) in data_type_weights.items():
+        # Apply multipliers
+        ratio_score = ratio_weight * size_multiplier['compression_ratio'] * access_multiplier['compression_ratio'] * network_multiplier['compression_ratio']
+        speed_score = speed_weight * size_multiplier['speed'] * access_multiplier['speed'] * network_multiplier['speed']
+        
+        # Overall score (equal weight to both factors)
+        overall_score = (ratio_score + speed_score) / 2
+        
+        algorithm_scores[algorithm] = {
+            'compression_score': ratio_score,
+            'speed_score': speed_score,
+            'overall_score': overall_score
+        }
+    
+    # Sort algorithms by overall score
+    sorted_algorithms = sorted(
+        algorithm_scores.items(),
+        key=lambda x: x[1]['overall_score'],
+        reverse=True
+    )
+    
+    # Extract recommendations
+    recommendations = {
+        'top_overall': sorted_algorithms[0][0],
+        'top_compression': sorted(
+            algorithm_scores.items(),
+            key=lambda x: x[1]['compression_score'],
+            reverse=True
+        )[0][0],
+        'top_speed': sorted(
+            algorithm_scores.items(),
+            key=lambda x: x[1]['speed_score'],
+            reverse=True
+        )[0][0],
+        'all_scores': algorithm_scores,
+        'recommendations': [
+            {
+                'algorithm': algo,
+                'overall_score': score['overall_score'],
+                'compression_score': score['compression_score'],
+                'speed_score': score['speed_score']
             }
-    
-    # Adjust for access pattern
-    if access_pattern == 'Rare':
-        recommendations['access_adjustment'] = {
-            'algorithm': 'LZMA, BZIP2',
-            'reason': 'For rarely accessed data, prioritize compression ratio over speed'
-        }
-    
-    # Adjust for network speed
-    if network_speed == 'Slow':
-        recommendations['network_adjustment'] = {
-            'algorithm': 'Higher compression ratio recommended',
-            'reason': 'In slow networks, the time saved in transfer outweighs compression time'
-        }
-    elif network_speed == 'Fast':
-        recommendations['network_adjustment'] = {
-            'algorithm': 'Consider if compression is necessary',
-            'reason': 'In very fast networks, compression might not save overall time'
-        }
-    
-    # Implementation recommendations
-    if data_type == 'Time Series':
-        recommendations['implementation'] = {
-            'strategy': 'Consider delta-of-delta for smoother series',
-            'distribution_approach': 'Pre-compress at source before distribution'
-        }
-    elif data_type == 'Text':
-        recommendations['implementation'] = {
-            'strategy': 'Consider preprocessing to normalize text patterns',
-            'distribution_approach': 'Compress once, distribute to many recipients'
-        }
-    else:
-        recommendations['implementation'] = {
-            'strategy': 'Profile your specific data distribution',
-            'distribution_approach': 'Benchmark multiple algorithms on sample data'
-        }
+            for algo, score in sorted_algorithms[:3]
+        ]
+    }
     
     return recommendations

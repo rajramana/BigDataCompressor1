@@ -3,12 +3,16 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import os
+import io
+from PIL import Image
 
 import compression_algorithms as ca
 import data_generator as dg
 import visualization as viz
 import comparative_analysis as analysis
 import utils
+from adaptive_framework import AdaptiveCompressionFramework
 
 # Page configuration
 st.set_page_config(

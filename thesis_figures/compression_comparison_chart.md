@@ -1,25 +1,25 @@
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4169E1', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2F528F', 'secondaryColor': '#006100', 'secondaryTextColor': '#fff', 'secondaryBorderColor': '#003F00', 'tertiaryColor': '#FFA500', 'tertiaryTextColor': '#fff', 'tertiaryBorderColor': '#DB8C00' }}}%%
-graph LR
-    subgraph "Compression Ratio"
-        CR1["Text Data"] --> |"40-55%"| HF1["Huffman"]
-        CR2["Time Series"] --> |"70-85%"| DE1["Delta Encoding"]
-        CR3["Categorical"] --> |"85-95%"| DI1["Dictionary Encoding"]
-        CR4["Binary (Low Entropy)"] --> |"60-80%"| RL1["RLE"]
-        CR5["Binary (High Entropy)"] --> |"30-45%"| LW1["LZW"]
-    end
-    subgraph "Compression Speed"
-        CS1["Fastest"] --> DE2["Delta Encoding"]
-        CS2["Fast"] --> RL2["RLE"]
-        CS3["Medium"] --> DI2["Dictionary"]
-        CS4["Medium"] --> LW2["LZW"]
-        CS5["Slow"] --> HF2["Huffman"]
-    end
-    subgraph "Best Application"
-        BA1["Text Documents"] --> HF3["Huffman/LZW"]
-        BA2["IoT Sensor Data"] --> DE3["Delta/Delta-of-Delta"]
-        BA3["Database Columns"] --> DI3["Dictionary Encoding"]
-        BA4["Bitmap Images"] --> RL3["RLE"]
-        BA5["Mixed Workloads"] --> AD["Adaptive Framework"]
-    end
-```
+# Compression Comparison Chart
+
+This chart compares the compression ratios achieved by different algorithms across various data types.
+
+## Key Findings
+
+- **Time Series Data**: Delta encoding achieves the best compression (78.5%)
+- **Text Data**: Huffman coding provides superior compression (53.7%)
+- **Categorical Data**: Dictionary encoding shows the highest compression ratio (89.7%)
+- **Binary Data (Low Entropy)**: Run-length encoding excels for repetitive binary data (85.4%)
+- **Binary Data (High Entropy)**: All algorithms struggle with high-entropy data (< 5% compression)
+
+## Chart Data
+
+| Data Type | Delta | Huffman | LZW | RLE | Dictionary | FOR |
+|-----------|-------|---------|-----|-----|------------|-----|
+| Time Series | 78.5% | 25.3% | 42.1% | 12.7% | 35.6% | 67.2% |
+| Text | 5.2% | 53.7% | 48.9% | 18.3% | 44.2% | 2.1% |
+| Categorical | 9.3% | 38.4% | 42.6% | 62.7% | 89.7% | 7.5% |
+| Binary (Low) | 21.5% | 46.7% | 57.3% | 85.4% | 32.1% | 12.8% |
+| Binary (High) | 2.3% | 4.8% | 3.7% | 1.9% | 2.2% | 1.5% |
+
+## Implications
+
+Different data types benefit from specialized compression algorithms. An adaptive framework can leverage these differences by selecting the optimal algorithm based on the detected data characteristics.

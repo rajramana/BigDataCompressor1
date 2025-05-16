@@ -2,15 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-
-# Page configuration
-st.set_page_config(
-    page_title="Compression Techniques for Big Data - Thesis Figures",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 def view_compression_comparison_chart():
     st.subheader("Compression Comparison Chart")
@@ -114,17 +105,16 @@ def view_huffman_coding_example():
     st.table(df_codes)
     
     st.markdown("""
-    ### Huffman Tree
-
-    ```
-                  (20)
-                 /    \\
-              (8)      (12)
-             /   \\     /   \\
-          (3)    (5) (5)    (7)
-         /  \\    / \\  / \\   / \\
-       C(1) R(1) S(1) I(1) N(1) X(1)
-    ```
+    ### Huffman Tree Construction Steps
+    
+    1. Create leaf nodes for each character with their frequencies
+    2. Build a min-heap (priority queue) with these nodes
+    3. While there is more than one node in the heap:
+       - Extract the two nodes with lowest frequency
+       - Create a new internal node with these two as children
+       - Assign the sum of the two frequencies to this new node
+       - Add this node back to the min-heap
+    4. The remaining node is the root of the Huffman tree
     """)
     
     st.markdown("### Compression Results")
@@ -137,20 +127,6 @@ def view_huffman_coding_example():
     col1.metric("Original Size (bits)", original_size)
     col2.metric("Compressed Size (bits)", compressed_size)
     col3.metric("Compression Ratio", f"{compression_ratio:.1f}%")
-    
-    st.markdown("""
-    ### Advantages and Limitations
-
-    #### Advantages
-    - Optimal for known frequency distributions
-    - Variable-length codes adapt to data characteristics
-    - Lossless compression preserves all information
-
-    #### Limitations
-    - Requires knowledge of frequency distribution (two passes or statistical model)
-    - Overhead of storing the codebook
-    - Less effective for uniform distributions
-    """)
 
 def view_delta_encoding_example():
     st.subheader("Delta Encoding Example")
@@ -199,16 +175,6 @@ def view_delta_encoding_example():
     - Requires special handling for missing values
     - Susceptible to error propagation (one error affects all subsequent values)
     """)
-    
-    st.markdown("""
-    ### Applications in Distributed Systems
-
-    - Sensor data storage and transmission
-    - System monitoring metrics
-    - Financial time series
-    - Database indexes
-    - Scientific measurement data
-    """)
 
 def view_compression_framework_diagram():
     st.subheader("Adaptive Compression Framework Diagram")
@@ -221,22 +187,22 @@ def view_compression_framework_diagram():
     
     components = {
         "Data Analyzer": [
-            "**Data type detection**: Identifies whether data is text, numerical, time series, categorical, or binary",
-            "**Statistical analysis**: Calculates entropy, run patterns, and value distributions",
-            "**Pattern recognition**: Identifies repeating sequences and correlation structures",
-            "**Range analysis**: Determines potential for range-based compression techniques"
+            "Data type detection: Identifies whether data is text, numerical, time series, categorical, or binary",
+            "Statistical analysis: Calculates entropy, run patterns, and value distributions",
+            "Pattern recognition: Identifies repeating sequences and correlation structures",
+            "Range analysis: Determines potential for range-based compression techniques"
         ],
         "Decision Engine": [
-            "**Algorithm scoring**: Ranks algorithms based on suitability for detected data characteristics",
-            "**Constraint evaluation**: Considers system requirements like speed vs. compression ratio",
-            "**Bonus scoring**: Awards extra points for specific data characteristics that certain algorithms excel at",
-            "**Final selection**: Chooses the algorithm with the highest overall score"
+            "Algorithm scoring: Ranks algorithms based on suitability for detected data characteristics",
+            "Constraint evaluation: Considers system requirements like speed vs. compression ratio",
+            "Bonus scoring: Awards extra points for specific data characteristics that certain algorithms excel at",
+            "Final selection: Chooses the algorithm with the highest overall score"
         ],
         "Compression Manager": [
-            "**Algorithm application**: Applies the selected compression algorithm",
-            "**Metadata management**: Stores algorithm choice and parameters with compressed data",
-            "**Format standardization**: Provides consistent interface for all algorithms",
-            "**Error handling**: Detects and manages compression/decompression errors"
+            "Algorithm application: Applies the selected compression algorithm",
+            "Metadata management: Stores algorithm choice and parameters with compressed data",
+            "Format standardization: Provides consistent interface for all algorithms",
+            "Error handling: Detects and manages compression/decompression errors"
         ]
     }
     
@@ -269,19 +235,6 @@ def view_compression_framework_diagram():
        - Time series data → Bonus for Delta-of-Delta
        - Categorical data → Bonus for Dictionary encoding
     4. **Final Selection**: Choose the algorithm with the highest total score
-    """)
-    
-    st.markdown("""
-    ### Data Type Detection
-
-    The framework analyzes sample data to identify its type based on characteristics:
-
-    - **Text**: String data with character patterns
-    - **Numerical**: Numbers without strong sequential patterns
-    - **Time Series**: Sequential numerical data with temporal patterns
-    - **Categorical**: Data with limited distinct values
-    - **Binary**: Binary patterns or extremely low-level data
-    - **Mixed**: Data that combines multiple types
     """)
 
 def main():
